@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import TokenWidget from '../components/TokenWidget'
 import '../styles/home.css'
 
 function useReveal() {
@@ -109,13 +110,13 @@ export default function Home() {
         </p>
 
         <div className="hero-buttons" style={{ animation: 'fadeUp 0.8s ease 1s both' }}>
-          <a href="https://pump.fun/coin/CCzgnyYdNQA1Gwaw2JhniBnrBvEi6fTX5HFNXFuwpump" className="btn-primary"> Buy $MGC</a>
+          <a href="https://pump.fun/coin/CCzgnyYdNQA1Gwaw2JhniBnrBvEi6fTX5HFNXFuwpump" target="_blank" className="btn-primary"> Buy $MGC</a>
           <Link to="/game" className="btn-secondary">🎮 Play Wizard Wars</Link>
         </div>
 
         <div className="hero-stats" style={{ animation: 'fadeUp 0.8s ease 1.2s both' }}>
           <div className="hero-stat">
-            <AnimatedCounter target={12} />
+            <AnimatedCounter target={19} />
             <div className="hero-stat-label">Holders</div>
           </div>
           <div className="hero-stat">
@@ -127,6 +128,11 @@ export default function Home() {
             <div className="hero-stat-label">LP Locked</div>
           </div>
         </div>
+      </section>
+
+      {/* TOKEN PRICE */}
+      <section style={{ position: 'relative', zIndex: 2, maxWidth: 1100, margin: '0 auto', padding: '40px 24px 0' }}>
+        <TokenWidget />
       </section>
 
       {/* FEATURES */}
