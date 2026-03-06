@@ -61,16 +61,16 @@ const SPELLS = {
 };
 
 const ENEMIES = [
-  { name: "Dark Apprentice", sprite: "en_dark_apprentice" },
-  { name: "Goblin Mage", sprite: "en_goblin_mage" },
-  { name: "Shadow Imp", sprite: "en_shadow_imp" },
-  { name: "Cursed Knight", sprite: "en_cursed_knight" },
-  { name: "Crystal Golem", sprite: "en_crystal_golem" },
-  { name: "Phantom Witch", sprite: "en_phantom_witch" },
-  { name: "Bone Sorcerer", sprite: "en_bone_sorcerer" },
-  { name: "Void Walker", sprite: "en_void_walker" },
-  { name: "Dragon Whelp", sprite: "en_dragon_whelp" },
-  { name: "Demon Summoner", sprite: "en_demon_summoner" },
+  { name: "Dark Apprentice", sprite: "en_dark_apprentice", height: 76 },
+  { name: "Goblin Mage", sprite: "en_goblin_mage", height: 64 },
+  { name: "Shadow Imp", sprite: "en_shadow_imp", height: 64 },
+  { name: "Cursed Knight", sprite: "en_cursed_knight", height: 100 },
+  { name: "Crystal Golem", sprite: "en_crystal_golem", height: 88 },
+  { name: "Phantom Witch", sprite: "en_phantom_witch", height: 64 },
+  { name: "Bone Sorcerer", sprite: "en_bone_sorcerer", height: 88 },
+  { name: "Void Walker", sprite: "en_void_walker", height: 96 },
+  { name: "Dragon Whelp", sprite: "en_dragon_whelp", height: 76 },
+  { name: "Demon Summoner", sprite: "en_demon_summoner", height: 100 },
 ];
 
 const MANA_REGEN = 25;
@@ -78,8 +78,8 @@ const MANA_REGEN = 25;
 function getEnemy(level) {
   const e = ENEMIES[(level - 1) % ENEMIES.length];
   const types = Object.keys(WIZARD_TYPES);
-  const baseHp = 80 + level * 15;
-  const baseDmg = 10 + level * 2;
+  const baseHp = 80 + level * 20;
+  const baseDmg = 12 + level * 4;
   return {
     ...e, level,
     type: types[Math.floor(Math.random() * types.length)],
@@ -167,14 +167,15 @@ class BootScene extends Phaser.Scene {
     // Try loading all assets — game works without them (fallbacks)
     const a = "/assets/";
     // Wizards — try sprite sheets first, static as fallback
-    ["fire","ice","shadow","nature","thunder"].forEach(el => {
-      this.load.spritesheet("wiz_"+el+"_idle", a+"wizards/"+el+"_idle.png", { frameWidth: 64, frameHeight: 64 });
-      this.load.image("wiz_"+el, a+"wizards/"+el+".png");
+    [{name: "fire", height: 84 },{name: "ice", height: 88},{name: "shadow", height: 84 },{name: "nature", height: 84},{name:"thunder", height: 88}]
+    .forEach(el => {
+      this.load.spritesheet("wiz_"+el.name+"_idle", a+"wizards/"+el.name+"_idle.png", { frameWidth: el.height, frameHeight: el.height });
+      this.load.image("wiz_"+el.name, a+"wizards/"+el.name+".png");
     });
     // Enemies — try sprite sheets first, static as fallback
     ENEMIES.forEach(e => {
       const file = e.sprite.replace("en_","");
-      this.load.spritesheet(e.sprite+"_idle", a+"enemies/"+file+"_idle.png", { frameWidth: 64, frameHeight: 64 });
+      this.load.spritesheet(e.sprite+"_idle", a+"enemies/"+file+"_idle.png", { frameWidth: e.height, frameHeight: e.height });
       this.load.image(e.sprite, a+"enemies/"+file+".png");
     });
     // Backgrounds
@@ -325,7 +326,7 @@ class SelectScene extends Phaser.Scene {
       const spells = SPELLS[key];
       spells.forEach((s, si) => {
         const dotX = cx - ((spells.length - 1) * 8) / 2 + si * 8;
-        this.add.circle(dotX, cy + 42, 3, s.type === "ultimate" ? 0xFFD700 : wiz.color, 0.5);
+        this.add.circle(dotX, cy + 42, 3, s.type === "ultimate" ? 0xFFFFFF : wiz.color, 0.5);
       });
 
       card.on("pointerover", () => card.setFillStyle(wiz.color, 0.2));
@@ -464,7 +465,7 @@ class BattleScene extends Phaser.Scene {
 
       const isHeavy = intent === "heavy";
       const dmg = isHeavy
-        ? Math.floor(e.dmgMax * 1.2) + Phaser.Math.Between(0, 4)
+        ? Math.floor(e.dmgMax * 1.3) + Phaser.Math.Between(0, 10)
         : Phaser.Math.Between(e.dmgMin, e.dmgMax);
 
       this.time.delayedCall(600, () => {
@@ -506,18 +507,14 @@ class BattleScene extends Phaser.Scene {
 
       if (spell.type === "defend" && spell.heal) {
         const maxHp = reg.get("playerMaxHp");
-        const levelBonus = Math.floor(reg.get("level") * 3);
-        const healAmt = spell.heal + levelBonus;
-        const newHp = Math.min(reg.get("playerHp") + healAmt, maxHp);
+        const newHp = Math.min(reg.get("playerHp") + spell.heal, maxHp);
         reg.set("playerHp", newHp);
         this.tweens.add({ targets: playerAv, alpha: 1.5, yoyo: true, duration: 200, repeat: 1 });
-        popDmg(200, 160, -healAmt, "#66BB6A");
-        addLog(`✨ ${spell.name}! +${healAmt} HP`);
+        popDmg(200, 160, -spell.heal, "#66BB6A");
+        addLog(`✨ ${spell.name}! +${spell.heal} HP`);
       } else {
-        const levelBonus = Math.floor(reg.get("level") * 2);
-        const baseDmg = spell.dmg + levelBonus;
         const crit = Math.random() < 0.15;
-        const dmg = crit ? Math.floor(baseDmg * 1.5) : baseDmg;
+        const dmg = crit ? Math.floor(spell.dmg * 1.5) : spell.dmg;
         const e = reg.get("enemy");
         e.hp -= dmg;
         reg.set("enemy", e);
@@ -613,7 +610,7 @@ class VictoryScene extends Phaser.Scene {
       txt(this, x, 285, s.label, { fontSize: 10, color: "#8b7aab", fontFamily: "Quicksand, sans-serif" });
     });
 
-    txt(this, W/2, 320, "💚 +35% HP & ✨ +40% Mana restored", { fontSize: 12, color: "#81c784", fontFamily: "Quicksand, sans-serif" });
+    txt(this, W/2, 320, "💚 +30 HP & ✨ +30 Mana restored", { fontSize: 12, color: "#81c784", fontFamily: "Quicksand, sans-serif" });
 
     // Next battle
     btn(this, W/2, 370, 200, 42, "NEXT BATTLE →", 0xFFD700, () => {
@@ -643,12 +640,10 @@ class VictoryScene extends Phaser.Scene {
     const reg = this.registry;
     const newLevel = reg.get("level") + 1;
     reg.set("level", newLevel);
-    reg.set("playerMaxHp", reg.get("playerMaxHp") + 40);
-    const maxHp = reg.get("playerMaxHp");
-    reg.set("playerHp", Math.min(reg.get("playerHp") + Math.floor(maxHp * 0.35), maxHp));
-    reg.set("playerMaxMana", reg.get("playerMaxMana") + 40);
-    const maxMana = reg.get("playerMaxMana");
-    reg.set("playerMana", Math.min(reg.get("playerMana") + Math.floor(maxMana * 0.4), maxMana));
+    reg.set("playerMaxHp", reg.get("playerMaxHp") + 30);
+    reg.set("playerHp", Math.min(reg.get("playerHp") + 30, reg.get("playerMaxHp")));
+    reg.set("playerMaxMana", reg.get("playerMaxMana") + 30);
+    reg.set("playerMana", Math.min(reg.get("playerMana") + 30, reg.get("playerMaxMana")));
     reg.set("enemy", getEnemy(newLevel));
     this.scene.start("Battle");
   }
@@ -686,9 +681,9 @@ class TavernScene extends Phaser.Scene {
 
     // Choices
     const choices = [
-      { key: "feast", label: "Feast", desc: "+70% HP, +20% Mana", icon: "ui_feast", emoji: "🍖", color: 0xef5350 },
-      { key: "meditate", label: "Meditate", desc: "Full Mana, +30% HP", icon: "ui_meditate", emoji: "🧘", color: 0x7c4dff },
-      { key: "rest", label: "Rest", desc: "+50% HP, +60% Mana", icon: "ui_rest", emoji: "🛏️", color: 0xF59E0B },
+      { key: "feast", label: "Feast", desc: "+60% HP, +15 Mana", icon: "ui_feast", emoji: "🍖", color: 0xef5350 },
+      { key: "meditate", label: "Meditate", desc: "Full Mana, +20% HP", icon: "ui_meditate", emoji: "🧘", color: 0x7c4dff },
+      { key: "rest", label: "Rest", desc: "+40% HP, +50% Mana", icon: "ui_rest", emoji: "🛏️", color: 0xF59E0B },
     ];
 
     choices.forEach((c, i) => {
@@ -728,23 +723,23 @@ class TavernScene extends Phaser.Scene {
     const maxHp = reg.get("playerMaxHp"), maxMana = reg.get("playerMaxMana");
 
     if (choice === "feast") {
-      reg.set("playerHp", Math.min(reg.get("playerHp") + Math.floor(maxHp * 0.7), maxHp));
-      reg.set("playerMana", Math.min(reg.get("playerMana") + Math.floor(maxMana * 0.2), maxMana));
+      reg.set("playerHp", Math.min(reg.get("playerHp") + Math.floor(maxHp * 0.6), maxHp));
+      reg.set("playerMana", Math.min(reg.get("playerMana") + 15, maxMana));
     } else if (choice === "meditate") {
       reg.set("playerMana", maxMana);
-      reg.set("playerHp", Math.min(reg.get("playerHp") + Math.floor(maxHp * 0.3), maxHp));
+      reg.set("playerHp", Math.min(reg.get("playerHp") + Math.floor(maxHp * 0.2), maxHp));
     } else {
-      reg.set("playerHp", Math.min(reg.get("playerHp") + Math.floor(maxHp * 0.5), maxHp));
-      reg.set("playerMana", Math.min(reg.get("playerMana") + Math.floor(maxMana * 0.6), maxMana));
+      reg.set("playerHp", Math.min(reg.get("playerHp") + Math.floor(maxHp * 0.4), maxHp));
+      reg.set("playerMana", Math.min(reg.get("playerMana") + Math.floor(maxMana * 0.5), maxMana));
     }
 
     // Go to next battle
     const newLevel = reg.get("level") + 1;
     reg.set("level", newLevel);
-    reg.set("playerMaxHp", maxHp + 40);
-    reg.set("playerHp", Math.min(reg.get("playerHp") + Math.floor(maxHp * 0.15), reg.get("playerMaxHp")));
-    reg.set("playerMaxMana", maxMana + 40);
-    reg.set("playerMana", Math.min(reg.get("playerMana") + Math.floor(maxMana * 0.15), reg.get("playerMaxMana")));
+    reg.set("playerMaxHp", maxHp + 30);
+    reg.set("playerHp", Math.min(reg.get("playerHp") + 30, reg.get("playerMaxHp")));
+    reg.set("playerMaxMana", maxMana + 30);
+    reg.set("playerMana", Math.min(reg.get("playerMana") + 30, reg.get("playerMaxMana")));
     reg.set("enemy", getEnemy(newLevel));
     this.cameras.main.fadeOut(200, 0, 0, 0, (cam, pct) => {
       if (pct >= 1) this.scene.start("Battle");
