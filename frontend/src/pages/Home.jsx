@@ -116,7 +116,7 @@ export default function Home() {
 
         <div className="hero-stats" style={{ animation: 'fadeUp 0.8s ease 1.2s both' }}>
           <div className="hero-stat">
-            <AnimatedCounter target={19} />
+            <AnimatedCounter target={18} />
             <div className="hero-stat-label">Holders</div>
           </div>
           <div className="hero-stat">
@@ -175,7 +175,7 @@ export default function Home() {
                   strokeDasharray="15.1 286.5" strokeDashoffset="-286.6" strokeLinecap="round" />
               </svg>
               <div className="donut-center">
-                <div style={{ fontSize: 36 }}>✨</div>
+                <div style={{ fontSize: 36 }}><img src="https://magic-token.com/magic.jpg" alt="MGC" style={{ width: 40, height: 40, borderRadius: 10 }} /></div>
                 <div style={{ fontFamily: "'Cinzel', serif", fontWeight: 900, fontSize: 14, color: 'var(--gold)' }}>$MGC</div>
               </div>
             </div>

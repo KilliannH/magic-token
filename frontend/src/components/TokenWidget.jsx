@@ -85,9 +85,7 @@ export default function TokenWidget() {
         .tw-token { display: flex; align-items: center; gap: 10px; }
         .tw-token-icon {
           width: 38px; height: 38px; border-radius: 12px;
-          background: linear-gradient(135deg, rgba(139,92,246,0.2), rgba(255,215,0,0.1));
-          display: flex; align-items: center; justify-content: center;
-          font-size: 20px;
+          object-fit: cover;
         }
         .tw-token-name {
           font-family: 'Cinzel', serif; font-weight: 900; font-size: 15px;
@@ -161,7 +159,7 @@ export default function TokenWidget() {
 
       <div className="tw-header">
         <div className="tw-token">
-          <div className="tw-token-icon">✨</div>
+          <img src="https://magic-token.com/magic.jpg" alt="MGC" className="tw-token-icon" />
           <div>
             <div className="tw-token-name">$MGC</div>
             <div className="tw-token-sub">Magic Token</div>
