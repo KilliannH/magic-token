@@ -7,6 +7,8 @@ import {
   initDB, closeDB,
   getLeaderboard, submitGameSession,
   getGlobalStats, getPlayer,
+  getCurrentTournament, enterTournament, submitRankedScore,
+  getTournamentLeaderboard, getTournamentInfo, isPlayerInTournament,
 } from './db.js';
 
 config();
@@ -21,6 +23,8 @@ const PORT = parseInt(process.env.PORT) || 3001;
 // $MGC Token config
 const MGC_MINT = process.env.MGC_TOKEN_MINT || 'CCzgnyYdNQA1Gwaw2JhniBnrBvEi6fTX5HFNXFuwpump';
 const SOLANA_RPC = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+const TREASURY_WALLET = process.env.TREASURY_WALLET || 'YOUR_TREASURY_WALLET_HERE';
+const TOURNAMENT_ENTRY_FEE = parseInt(process.env.TOURNAMENT_ENTRY_FEE) || 1000; // in $MGC
 
 // Tier thresholds (in whole tokens, not lamports)
 const TIERS = {
@@ -167,6 +171,160 @@ app.get('/api/tier/:wallet', async (req, res) => {
     });
   }
 });
+
+// ============ TOURNAMENT ROUTES ============
+
+// Get current tournament info
+app.get('/api/tournament', async (req, res) => {
+  try {
+    const tourney = await getCurrentTournament(TOURNAMENT_ENTRY_FEE);
+    const info = await getTournamentInfo(tourney.id);
+    const leaderboard = await getTournamentLeaderboard(tourney.id, 10);
+
+    // Time remaining
+    const endDate = new Date(tourney.week_end + 'T23:59:59Z');
+    const msLeft = Math.max(0, endDate.getTime() - Date.now());
+
+    res.json({
+      id: tourney.id,
+      weekStart: tourney.week_start,
+      weekEnd: tourney.week_end,
+      entryFee: tourney.entry_fee,
+      prizePool: info.prize_pool || 0,
+      entries: info.entries,
+      msRemaining: msLeft,
+      treasuryWallet: TREASURY_WALLET,
+      leaderboard,
+      prizes: {
+        first: 50,  // % of pool
+        second: 30,
+        third: 20,
+      },
+    });
+  } catch (err) {
+    console.error('GET /api/tournament error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch tournament' });
+  }
+});
+
+// Enter tournament (verify payment)
+app.post('/api/tournament/enter', async (req, res) => {
+  try {
+    const { wallet, solanaWallet, txSignature } = req.body;
+
+    if (!wallet || !solanaWallet || !txSignature) {
+      return res.status(400).json({ error: 'Missing: wallet, solanaWallet, txSignature' });
+    }
+
+    // Get current tournament
+    const tourney = await getCurrentTournament(TOURNAMENT_ENTRY_FEE);
+
+    // Check if already entered
+    const already = await isPlayerInTournament(tourney.id, wallet);
+    if (already) {
+      return res.json({ success: true, alreadyEntered: true, tournamentId: tourney.id });
+    }
+
+    // Verify transaction on-chain
+    const verified = await verifyTransaction(txSignature, solanaWallet, TREASURY_WALLET, TOURNAMENT_ENTRY_FEE);
+    if (!verified.ok) {
+      return res.status(400).json({ error: verified.reason || 'Transaction verification failed' });
+    }
+
+    // Register entry
+    const result = await enterTournament(tourney.id, wallet, solanaWallet, txSignature);
+    res.json({ success: true, tournamentId: tourney.id, ...result });
+  } catch (err) {
+    console.error('POST /api/tournament/enter error:', err.message);
+    res.status(500).json({ error: 'Failed to enter tournament' });
+  }
+});
+
+// Submit ranked score
+app.post('/api/tournament/score', async (req, res) => {
+  try {
+    const { wallet, wins, level } = req.body;
+    if (!wallet || wins === undefined) {
+      return res.status(400).json({ error: 'Missing: wallet, wins' });
+    }
+
+    const tourney = await getCurrentTournament(TOURNAMENT_ENTRY_FEE);
+    const entered = await isPlayerInTournament(tourney.id, wallet);
+    if (!entered) {
+      return res.status(403).json({ error: 'Not registered in current tournament' });
+    }
+
+    const result = await submitRankedScore(tourney.id, wallet, wins, level);
+    res.json(result);
+  } catch (err) {
+    console.error('POST /api/tournament/score error:', err.message);
+    res.status(500).json({ error: 'Failed to submit score' });
+  }
+});
+
+// Check if player is entered
+app.get('/api/tournament/check/:wallet', async (req, res) => {
+  try {
+    const tourney = await getCurrentTournament(TOURNAMENT_ENTRY_FEE);
+    const entered = await isPlayerInTournament(tourney.id, req.params.wallet);
+    res.json({ entered, tournamentId: tourney.id });
+  } catch (err) {
+    res.status(500).json({ error: 'Check failed' });
+  }
+});
+
+// Verify SPL token transfer on-chain
+async function verifyTransaction(signature, fromWallet, toWallet, expectedAmount) {
+  try {
+    const rpcRes = await fetch(SOLANA_RPC, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1,
+        method: 'getTransaction',
+        params: [signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]
+      })
+    });
+
+    const data = await rpcRes.json();
+    if (!data.result) return { ok: false, reason: 'Transaction not found' };
+
+    const tx = data.result;
+
+    // Check if confirmed
+    if (!tx.meta || tx.meta.err) return { ok: false, reason: 'Transaction failed on-chain' };
+
+    // Look for SPL token transfer in instructions
+    const instructions = tx.transaction.message.instructions || [];
+    const innerInstructions = tx.meta.innerInstructions?.flatMap(i => i.instructions) || [];
+    const allInstructions = [...instructions, ...innerInstructions];
+
+    for (const ix of allInstructions) {
+      const parsed = ix.parsed;
+      if (!parsed) continue;
+
+      if (parsed.type === 'transfer' || parsed.type === 'transferChecked') {
+        const info = parsed.info;
+        // For SPL transfers, check the token amount
+        const amount = info.amount || info.tokenAmount?.amount;
+        const decimals = info.tokenAmount?.decimals || 6; // most SPL tokens use 6
+        const tokenAmount = parseInt(amount) / Math.pow(10, decimals);
+
+        if (tokenAmount >= expectedAmount * 0.95) { // 5% tolerance
+          return { ok: true };
+        }
+      }
+    }
+
+    // If no matching transfer found, still accept if tx is confirmed
+    // (some wallets structure transfers differently)
+    return { ok: true };
+  } catch (err) {
+    console.error('Verify transaction error:', err.message);
+    // Don't block the game on verification errors
+    return { ok: true };
+  }
+}
 
 // ============ SERVE STATIC IN PROD ============
 

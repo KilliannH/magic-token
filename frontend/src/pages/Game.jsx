@@ -188,13 +188,24 @@ export default function WizardWarsWeb() {
   const [enemyIntent, setEnemyIntent] = useState(null);
   const [fadeClass, setFadeClass] = useState("fade-in");
   const [leaderboard, setLeaderboard] = useState([]);
+  const [gameMode, setGameMode] = useState("free");
+  const [tournamentId, setTournamentId] = useState(null);
+  const [tournamentData, setTournamentData] = useState(null);
+  const [tournamentStatus, setTournamentStatus] = useState("");
   const logRef = useRef(null);
+
+  const playerId = (() => {
+    const name = username.trim() || "Anonymous";
+    const tgId = isTelegram ? tg.initDataUnsafe?.user?.id : null;
+    return tgId ? `tg_${tgId}` : "player_" + name.toLowerCase().replace(/\s/g, "_");
+  })();
 
   // Fetch leaderboard
   useEffect(() => {
     if (screen === "gameover") {
-      fetch("/api/leaderboard").then(r => r.json()).then(d => {
-        if (d.leaderboard) setLeaderboard(d.leaderboard);
+      const endpoint = gameMode === "ranked" ? "/api/tournament" : "/api/leaderboard";
+      fetch(endpoint).then(r => r.json()).then(d => {
+        setLeaderboard(d.leaderboard || []);
       }).catch(() => {});
     }
   }, [screen]);
@@ -203,12 +214,16 @@ export default function WizardWarsWeb() {
   useEffect(() => {
     if (screen === "gameover" && wins > 0) {
       const name = username.trim() || "Anonymous";
-      const tgId = isTelegram ? tg.initDataUnsafe?.user?.id : null;
-      const id = tgId ? `tg_${tgId}` : "player_" + name.toLowerCase().replace(/\s/g, "_");
       fetch("/api/leaderboard", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet: id, name, wins, level, element: playerType }),
+        body: JSON.stringify({ wallet: playerId, name, wins, level, element: playerType }),
       }).catch(() => {});
+      if (gameMode === "ranked") {
+        fetch("/api/tournament/score", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet: playerId, wins, level }),
+        }).catch(() => {});
+      }
     }
   }, [screen]);
 
@@ -359,8 +374,38 @@ export default function WizardWarsWeb() {
     if (isTelegram) tg.switchInlineQuery(`I scored ${wins} wins in Wizard Wars! 🧙‍♂️`, ["users", "groups"]);
   };
 
+  const openTournament = () => {
+    if (!username.trim()) return;
+    setTournamentStatus("Loading...");
+    transition(() => setScreen("tournament"));
+    fetch("/api/tournament").then(r => r.json()).then(d => {
+      setTournamentData(d); setTournamentStatus("");
+    }).catch(() => setTournamentStatus("Failed to load tournament."));
+  };
+
+  const enterTournament = (solanaWallet, txSig) => {
+    setTournamentStatus("⏳ Verifying on-chain...");
+    fetch("/api/tournament/enter", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wallet: playerId, solanaWallet, txSignature: txSig }),
+    }).then(r => r.json()).then(result => {
+      if (result.success || result.alreadyEntered) {
+        haptic("success"); setGameMode("ranked"); setTournamentId(result.tournamentId);
+        setTournamentStatus("✅ Verified!");
+        setTimeout(() => transition(() => setScreen("select")), 600);
+      } else { setTournamentStatus(`❌ ${result.error || "Verification failed"}`); }
+    }).catch(() => setTournamentStatus("❌ Network error — try again"));
+  };
+
+  const formatTime = (ms) => {
+    const h = Math.floor(ms / 3600000);
+    if (h >= 24) return `${Math.floor(h / 24)}d ${h % 24}h`;
+    return `${h}h ${Math.floor((ms % 3600000) / 60000)}m`;
+  };
+
   const spells = playerType ? SPELLS[playerType] : [];
   const typeInfo = playerType ? WIZARD_TYPES[playerType] : null;
+  const isRanked = gameMode === "ranked";
 
   return (
     <>
@@ -548,6 +593,21 @@ export default function WizardWarsWeb() {
         .lb-rank { font-weight: 800; min-width: 26px; }
         .lb-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .lb-wins { font-weight: 800; font-family: 'Cinzel', serif; }
+
+        .ranked-badge { display: inline-block; padding: 3px 10px; border-radius: 8px; background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.25); color: #F59E0B; font-size: 10px; font-weight: 800; }
+        .btn-ranked { border-color: #F59E0B; color: #F59E0B; background: linear-gradient(135deg, rgba(245,158,11,0.1), rgba(245,158,11,0.04)); font-size: 15px; }
+        .tourney-wrap { display: flex; flex-direction: column; align-items: center; padding: 24px 20px; min-height: 720px; }
+        .tourney-pool { font-family: 'Cinzel', serif; font-weight: 900; font-size: 24px; color: #FFD700; margin: 8px 0 2px; }
+        .tourney-infos { display: flex; gap: 24px; margin: 14px 0 10px; }
+        .tourney-info { text-align: center; }
+        .tourney-info-val { font-size: 14px; font-weight: 700; color: #e0d0ff; }
+        .tourney-info-label { font-size: 9px; color: #5a4a6e; text-transform: uppercase; letter-spacing: 1px; }
+        .tourney-enter { width: 100%; max-width: 340px; padding: 18px; border-radius: 16px; background: rgba(245,158,11,0.03); border: 1px solid rgba(245,158,11,0.1); margin-top: 14px; }
+        .tourney-input { width: 100%; padding: 9px 12px; border-radius: 10px; border: 1.5px solid rgba(245,158,11,0.2); background: rgba(20,12,40,0.9); color: #e0d0ff; font-family: 'Quicksand', sans-serif; font-size: 12px; font-weight: 600; text-align: center; outline: none; margin-bottom: 8px; box-sizing: border-box; }
+        .tourney-input:focus { border-color: rgba(245,158,11,0.5); }
+        .tourney-status { font-size: 12px; margin: 8px 0; min-height: 18px; }
+        .copy-btn { padding: 6px 14px; border-radius: 8px; border: 1px solid rgba(123,47,190,0.2); background: rgba(123,47,190,0.06); color: #b388ff; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s; font-family: 'Quicksand', sans-serif; margin-bottom: 10px; }
+        .copy-btn:hover { background: rgba(123,47,190,0.12); }
       `}</style>
 
       <div className={`game-shell ${isTelegram ? "tg-mode" : ""}`}>
@@ -577,19 +637,74 @@ export default function WizardWarsWeb() {
                 </p>
                 <input className="name-input" type="text" placeholder="Enter wizard name..." maxLength={16}
                   value={username} onChange={e => setUsername(e.target.value.slice(0, 16))}
-                  onKeyDown={e => e.key === "Enter" && username.trim() && transition(() => setScreen("select"))} />
+                  onKeyDown={e => { if (e.key === "Enter" && username.trim()) { setGameMode("free"); transition(() => setScreen("select")); } }} />
                 <button className="play-btn"
-                  style={{ opacity: username.trim() ? 1 : 0.4, pointerEvents: username.trim() ? "auto" : "none" }}
-                  onClick={() => username.trim() && transition(() => setScreen("select"))}>
+                  style={{ opacity: username.trim() ? 1 : 0.4, pointerEvents: username.trim() ? "auto" : "none", marginBottom: 10 }}
+                  onClick={() => { if (!username.trim()) return; setGameMode("free"); transition(() => setScreen("select")); }}>
                   ⚔️ PLAY
                 </button>
+                <button className="btn-gold btn-ranked"
+                  style={{ opacity: username.trim() ? 1 : 0.4, pointerEvents: username.trim() ? "auto" : "none" }}
+                  onClick={openTournament}>
+                  🏆 RANKED
+                </button>
+              </div>
+            )}
+
+            {/* ===== TOURNAMENT ===== */}
+            {screen === "tournament" && (
+              <div className="tourney-wrap">
+                <div className="cinzel gold" style={{ fontSize: 20 }}>🏆 Weekly Tournament</div>
+                {!tournamentData ? (
+                  <div className="dim" style={{ marginTop: 40 }}>{tournamentStatus || "Loading..."}</div>
+                ) : (<>
+                  <div className="tourney-pool">{tournamentData.prizePool > 0 ? `${Number(tournamentData.prizePool).toLocaleString()} $MGC` : `${tournamentData.entryFee} $MGC / entry`}</div>
+                  <div className="dim" style={{ fontSize: 10 }}>Prize Pool</div>
+                  <div className="tourney-infos">
+                    <div className="tourney-info"><div className="tourney-info-val">{tournamentData.entries}</div><div className="tourney-info-label">Entries</div></div>
+                    <div className="tourney-info"><div className="tourney-info-val">{tournamentData.entryFee} $MGC</div><div className="tourney-info-label">Entry Fee</div></div>
+                    <div className="tourney-info"><div className="tourney-info-val">{formatTime(tournamentData.msRemaining)}</div><div className="tourney-info-label">Ends in</div></div>
+                  </div>
+                  <div className="dim" style={{ fontSize: 12, marginBottom: 14 }}>🥇 50%  ·  🥈 30%  ·  🥉 20%</div>
+                  {tournamentData.leaderboard?.length > 0 && (
+                    <div className="lb" style={{ marginTop: 0, marginBottom: 14 }}>
+                      <div className="cinzel gold" style={{ fontSize: 12, textAlign: "center", marginBottom: 6 }}>Current Rankings</div>
+                      {tournamentData.leaderboard.slice(0, 7).map((p, i) => (
+                        <div key={i} className={`lb-row ${p.name === username.trim() ? "lb-you" : ""}`}>
+                          <span className="lb-rank">#{i+1}</span><span className="lb-name">{p.name}</span><span className="lb-wins">{p.best_wins}W</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="tourney-enter">
+                    <div className="cinzel" style={{ fontSize: 14, color: "#F59E0B", marginBottom: 8 }}>Enter Tournament</div>
+                    <div className="dim" style={{ fontSize: 11, marginBottom: 8 }}>Send {tournamentData.entryFee} $MGC to:</div>
+                    <button className="copy-btn" onClick={(e) => {
+                      navigator.clipboard?.writeText(tournamentData.treasuryWallet);
+                      e.target.textContent = "✅ Copied!";
+                      setTimeout(() => { e.target.textContent = `📋 ${tournamentData.treasuryWallet?.slice(0,8)}...${tournamentData.treasuryWallet?.slice(-8)}`; }, 1500);
+                    }}>📋 {tournamentData.treasuryWallet?.slice(0,8)}...{tournamentData.treasuryWallet?.slice(-8)}</button>
+                    <input className="tourney-input" id="tw-wallet" placeholder="Your Solana wallet..." maxLength={64} />
+                    <input className="tourney-input" id="tw-tx" placeholder="Paste transaction signature..." maxLength={128} />
+                    <div className="tourney-status" style={{ color: tournamentStatus.startsWith("✅") ? "#66BB6A" : tournamentStatus.startsWith("❌") ? "#ef5350" : "#F59E0B" }}>{tournamentStatus}</div>
+                    <button className="btn-gold btn-ranked" style={{ width: "100%" }} onClick={() => {
+                      const w = document.getElementById("tw-wallet")?.value?.trim();
+                      const tx = document.getElementById("tw-tx")?.value?.trim();
+                      if (!w || w.length < 32) { setTournamentStatus("❌ Enter your Solana wallet"); return; }
+                      if (!tx || tx.length < 64) { setTournamentStatus("❌ Enter the transaction signature"); return; }
+                      enterTournament(w, tx);
+                    }}>⚔️ ENTER & PLAY</button>
+                  </div>
+                </>)}
+                <button className="btn-gold btn-dim" style={{ marginTop: 14 }} onClick={() => transition(() => setScreen("title"))}>← Back</button>
               </div>
             )}
 
             {/* ===== SELECT ===== */}
             {screen === "select" && (
               <div className="select-wrap">
-                <div className="cinzel" style={{ fontSize: 20, marginBottom: 20 }}>Choose Your Wizard</div>
+                <div className="cinzel" style={{ fontSize: 20, marginBottom: 6 }}>Choose Your Wizard</div>
+                {isRanked && <div className="ranked-badge" style={{ marginBottom: 14 }}>🏆 RANKED MODE</div>}
                 <div className="wiz-grid">
                   {Object.entries(WIZARD_TYPES).map(([key, wiz]) => (
                     <div key={key} className="wiz-card" onClick={() => startGame(key)}
@@ -607,6 +722,7 @@ export default function WizardWarsWeb() {
               <div className="battle-wrap">
                 <div className="battle-top">
                   <span>⚔️ Battle {level}</span>
+                  {isRanked && <span className="ranked-badge">🏆 RANKED</span>}
                   <span>🏆 Wins: {wins}</span>
                 </div>
 
@@ -679,6 +795,7 @@ export default function WizardWarsWeb() {
                 <div className="result-icon"><AnimSprite basePath="ui/trophy" fallback="🏆" size={64} frameW={64} /></div>
                 <div className="result-title gold">VICTORY!</div>
                 <div className="dim" style={{ fontSize: 13 }}>{enemy?.name} defeated</div>
+                {isRanked && <div className="ranked-badge" style={{ margin: "6px 0" }}>🏆 Ranked Run</div>}
                 <div className="result-stats">
                   {[{ l: "Wins", v: wins }, { l: "Level", v: level }, { l: "HP Left", v: Math.ceil(playerHp) }].map((s, i) => (
                     <div key={i}><div className="result-stat-val">{s.v}</div><div className="result-stat-label">{s.l}</div></div>
@@ -687,7 +804,7 @@ export default function WizardWarsWeb() {
                 <div className="dim" style={{ fontSize: 12 }}>💚 +25% HP & ✨ +30% Mana restored</div>
                 <button className="btn-gold" onClick={nextBattle}>NEXT BATTLE →</button>
                 {isTelegram && <button className="btn-gold btn-tg" onClick={shareScore}>📤 Share Score</button>}
-                <button className="btn-gold btn-dim" onClick={() => transition(() => setScreen("title"))}>MENU</button>
+                <button className="btn-gold btn-dim" onClick={() => { setGameMode("free"); transition(() => setScreen("title")); }}>MENU</button>
               </div>
             )}
 
@@ -697,6 +814,7 @@ export default function WizardWarsWeb() {
                 <div className="result-icon"><AnimSprite basePath="ui/tavern-sign" fallback="🍺" size={72} frameW={72} /></div>
                 <div className="cinzel gold" style={{ fontSize: 22, marginBottom: 4 }}>The Wizard's Tavern</div>
                 <div className="dim" style={{ fontSize: 12, marginBottom: 16 }}>Rest before your next battle.</div>
+                {isRanked && <div className="ranked-badge" style={{ marginBottom: 12 }}>🏆 Ranked Run</div>}
                 <div className="tavern-status">
                   <span style={{ color: "#ef5350" }}>❤️ {Math.ceil(playerHp)}/{playerMaxHp}</span>
                   <span style={{ color: "#b388ff" }}>✨ {Math.ceil(playerMana)}/{playerMaxMana}</span>
@@ -728,6 +846,7 @@ export default function WizardWarsWeb() {
                 <div className="result-icon"><AnimSprite basePath="ui/skull" fallback="💀" size={64} frameW={64} /></div>
                 <div className="result-title" style={{ color: "#F44336" }}>DEFEATED</div>
                 <div className="dim" style={{ fontSize: 12 }}>The magic wasn't strong enough...</div>
+                {isRanked && <div className="ranked-badge" style={{ margin: "6px 0" }}>🏆 Ranked Run — Score submitted</div>}
                 <div className="result-stats">
                   {[{ l: "Victories", v: wins }, { l: "Reached", v: `Lv.${level}` }].map((s, i) => (
                     <div key={i}><div className="result-stat-val">{s.v}</div><div className="result-stat-label">{s.l}</div></div>
@@ -735,11 +854,11 @@ export default function WizardWarsWeb() {
                 </div>
                 <button className="btn-gold" onClick={() => transition(() => setScreen("select"))}>TRY AGAIN</button>
                 {isTelegram && <button className="btn-gold btn-tg" onClick={shareScore}>📤 Share Score</button>}
-                <button className="btn-gold btn-dim" onClick={() => transition(() => setScreen("title"))}>MENU</button>
+                <button className="btn-gold btn-dim" onClick={() => { setGameMode("free"); transition(() => setScreen("title")); }}>MENU</button>
 
                 {leaderboard.length > 0 && (
                   <div className="lb">
-                    <div className="cinzel gold" style={{ fontSize: 14, textAlign: "center", marginBottom: 8 }}>🏆 Leaderboard</div>
+                    <div className="cinzel gold" style={{ fontSize: 14, textAlign: "center", marginBottom: 8 }}>{isRanked ? "🏆 Ranked Leaderboard" : "🏆 Leaderboard"}</div>
                     {leaderboard.slice(0, 8).map((p, i) => (
                       <div key={i} className={`lb-row ${p.name === username.trim() ? "lb-you" : ""}`}>
                         <span className="lb-rank">#{i+1}</span>

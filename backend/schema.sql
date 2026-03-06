@@ -52,3 +52,48 @@ FROM game_sessions gs;
 CREATE INDEX IF NOT EXISTS idx_game_sessions_player  ON game_sessions(player_id);
 CREATE INDEX IF NOT EXISTS idx_game_sessions_wins    ON game_sessions(wins DESC);
 CREATE INDEX IF NOT EXISTS idx_players_wallet        ON players(wallet);
+
+-- ============================================
+-- Tournament System
+-- ============================================
+
+-- Weekly tournaments
+CREATE TABLE IF NOT EXISTS tournaments (
+  id            SERIAL PRIMARY KEY,
+  week_start    DATE NOT NULL UNIQUE,
+  week_end      DATE NOT NULL,
+  entry_fee     BIGINT NOT NULL DEFAULT 1000,
+  prize_pool    BIGINT NOT NULL DEFAULT 0,
+  status        VARCHAR(16) NOT NULL DEFAULT 'active',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Tournament entries (players who paid)
+CREATE TABLE IF NOT EXISTS tournament_entries (
+  id              SERIAL PRIMARY KEY,
+  tournament_id   INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+  player_id       INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  solana_wallet   VARCHAR(64) NOT NULL,
+  tx_signature    VARCHAR(128) NOT NULL UNIQUE,
+  best_wins       INTEGER NOT NULL DEFAULT 0,
+  best_level      INTEGER NOT NULL DEFAULT 1,
+  entered_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(tournament_id, player_id)
+);
+
+-- Tournament ranked leaderboard view
+CREATE OR REPLACE VIEW tournament_leaderboard AS
+SELECT
+  te.tournament_id,
+  p.wallet,
+  p.name,
+  te.solana_wallet,
+  te.best_wins,
+  te.best_level,
+  te.entered_at
+FROM tournament_entries te
+JOIN players p ON p.id = te.player_id
+ORDER BY te.best_wins DESC, te.best_level DESC;
+
+CREATE INDEX IF NOT EXISTS idx_tournament_entries_tourney ON tournament_entries(tournament_id);
+CREATE INDEX IF NOT EXISTS idx_tournament_entries_wins ON tournament_entries(best_wins DESC);

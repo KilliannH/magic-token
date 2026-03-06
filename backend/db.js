@@ -161,6 +161,123 @@ export async function getGlobalStats() {
   };
 }
 
+// ============ TOURNAMENTS ============
+
+// Get or create current week's tournament
+export async function getCurrentTournament(entryFee = 1000) {
+  // Week starts Monday 00:00 UTC
+  const now = new Date();
+  const day = now.getUTCDay(); // 0=Sun, 1=Mon
+  const diff = day === 0 ? 6 : day - 1; // days since Monday
+  const monday = new Date(now);
+  monday.setUTCDate(now.getUTCDate() - diff);
+  monday.setUTCHours(0, 0, 0, 0);
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  sunday.setUTCHours(23, 59, 59, 999);
+
+  const weekStart = monday.toISOString().split('T')[0];
+  const weekEnd = sunday.toISOString().split('T')[0];
+
+  // Try to get existing
+  const existing = await pool.query(
+    'SELECT * FROM tournaments WHERE week_start = $1', [weekStart]
+  );
+  if (existing.rows.length > 0) return existing.rows[0];
+
+  // Create new
+  const result = await pool.query(
+    'INSERT INTO tournaments (week_start, week_end, entry_fee) VALUES ($1, $2, $3) RETURNING *',
+    [weekStart, weekEnd, entryFee]
+  );
+  return result.rows[0];
+}
+
+// Register player in tournament (after payment verified)
+export async function enterTournament(tournamentId, wallet, solanaWallet, txSignature) {
+  const player = await findOrCreatePlayer(wallet, wallet, 'fire');
+
+  const result = await pool.query(
+    `INSERT INTO tournament_entries (tournament_id, player_id, solana_wallet, tx_signature)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (tournament_id, player_id) DO NOTHING
+     RETURNING id`,
+    [tournamentId, player.id, solanaWallet, txSignature]
+  );
+
+  if (result.rows.length === 0) {
+    return { alreadyEntered: true };
+  }
+
+  // Update prize pool
+  const tourney = await pool.query('SELECT entry_fee FROM tournaments WHERE id = $1', [tournamentId]);
+  const fee = tourney.rows[0]?.entry_fee || 1000;
+  await pool.query(
+    'UPDATE tournaments SET prize_pool = prize_pool + $1 WHERE id = $2',
+    [fee, tournamentId]
+  );
+
+  return { entryId: result.rows[0].id };
+}
+
+// Submit ranked score
+export async function submitRankedScore(tournamentId, wallet, wins, level) {
+  const player = await pool.query('SELECT id FROM players WHERE wallet = $1', [wallet]);
+  if (player.rows.length === 0) return { error: 'Player not found' };
+
+  const playerId = player.rows[0].id;
+
+  // Only update if better
+  await pool.query(
+    `UPDATE tournament_entries
+     SET best_wins = GREATEST(best_wins, $1), best_level = GREATEST(best_level, $2)
+     WHERE tournament_id = $3 AND player_id = $4`,
+    [wins, level, tournamentId, playerId]
+  );
+
+  return { success: true };
+}
+
+// Get tournament leaderboard
+export async function getTournamentLeaderboard(tournamentId, limit = 20) {
+  const result = await pool.query(
+    `SELECT wallet, name, solana_wallet, best_wins, best_level
+     FROM tournament_leaderboard
+     WHERE tournament_id = $1
+     LIMIT $2`,
+    [tournamentId, limit]
+  );
+  return result.rows;
+}
+
+// Get tournament entry count and prize pool
+export async function getTournamentInfo(tournamentId) {
+  const countResult = await pool.query(
+    'SELECT COUNT(*) AS entries FROM tournament_entries WHERE tournament_id = $1',
+    [tournamentId]
+  );
+  const tourneyResult = await pool.query(
+    'SELECT * FROM tournaments WHERE id = $1',
+    [tournamentId]
+  );
+  return {
+    ...tourneyResult.rows[0],
+    entries: parseInt(countResult.rows[0].entries),
+  };
+}
+
+// Check if player is entered in tournament
+export async function isPlayerInTournament(tournamentId, wallet) {
+  const player = await pool.query('SELECT id FROM players WHERE wallet = $1', [wallet]);
+  if (player.rows.length === 0) return false;
+
+  const entry = await pool.query(
+    'SELECT id FROM tournament_entries WHERE tournament_id = $1 AND player_id = $2',
+    [tournamentId, player.rows[0].id]
+  );
+  return entry.rows.length > 0;
+}
+
 // ============ CLEANUP ============
 
 export async function closeDB() {
