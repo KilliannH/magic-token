@@ -23,7 +23,7 @@ const PORT = parseInt(process.env.PORT) || 3001;
 // $MGC Token config
 const MGC_MINT = process.env.MGC_TOKEN_MINT || 'CCzgnyYdNQA1Gwaw2JhniBnrBvEi6fTX5HFNXFuwpump';
 const SOLANA_RPC = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-const TREASURY_WALLET = process.env.TREASURY_WALLET || 'YOUR_TREASURY_WALLET_HERE';
+const TREASURY_WALLET = process.env.TREASURY_WALLET || '7PCxVEhtFP7iyK8m3xJzPnqWbruMSmjsFskDV9aeDPpu';
 const TOURNAMENT_ENTRY_FEE = parseInt(process.env.TOURNAMENT_ENTRY_FEE) || 1000; // in $MGC
 
 // Tier thresholds (in whole tokens, not lamports)
@@ -174,6 +174,49 @@ app.get('/api/tier/:wallet', async (req, res) => {
 
 // ============ TOURNAMENT ROUTES ============
 
+// Admin: tournament results with Solana wallets for prize distribution
+// Access: /api/tournament/admin?key=YOUR_ADMIN_KEY
+app.get('/api/tournament/admin', async (req, res) => {
+  const adminKey = process.env.ADMIN_KEY || 'mgc-admin-2026';
+  if (req.query.key !== adminKey) {
+    return res.status(403).json({ error: 'Invalid admin key' });
+  }
+
+  try {
+    const tourney = await getCurrentTournament(TOURNAMENT_ENTRY_FEE);
+    const info = await getTournamentInfo(tourney.id);
+    const leaderboard = await getTournamentLeaderboard(tourney.id, 50);
+
+    const pool = info.prize_pool || 0;
+    const top3 = leaderboard.slice(0, 3).map((p, i) => ({
+      rank: i + 1,
+      name: p.name,
+      solanaWallet: p.solana_wallet,
+      wins: p.best_wins,
+      level: p.best_level,
+      prizePercent: [50, 30, 20][i],
+      prizeAmount: Math.floor(pool * [0.5, 0.3, 0.2][i]),
+    }));
+
+    res.json({
+      tournament: {
+        id: tourney.id,
+        weekStart: tourney.week_start,
+        weekEnd: tourney.week_end,
+        entryFee: tourney.entry_fee,
+        prizePool: pool,
+        totalEntries: info.entries,
+        status: tourney.status,
+      },
+      winners: top3,
+      fullLeaderboard: leaderboard,
+    });
+  } catch (err) {
+    console.error('GET /api/tournament/admin error:', err.message);
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
 // Get current tournament info
 app.get('/api/tournament', async (req, res) => {
   try {
@@ -182,7 +225,10 @@ app.get('/api/tournament', async (req, res) => {
     const leaderboard = await getTournamentLeaderboard(tourney.id, 10);
 
     // Time remaining
-    const endDate = new Date(tourney.week_end + 'T23:59:59Z');
+    const endStr = typeof tourney.week_end === 'string'
+      ? tourney.week_end
+      : tourney.week_end.toISOString().split('T')[0];
+    const endDate = new Date(endStr + 'T23:59:59Z');
     const msLeft = Math.max(0, endDate.getTime() - Date.now());
 
     res.json({
