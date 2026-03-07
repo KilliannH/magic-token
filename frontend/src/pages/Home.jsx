@@ -116,7 +116,7 @@ export default function Home() {
 
         <div className="hero-stats" style={{ animation: 'fadeUp 0.8s ease 1.2s both' }}>
           <div className="hero-stat">
-            <AnimatedCounter target={18} />
+            <AnimatedCounter target={24} />
             <div className="hero-stat-label">Holders</div>
           </div>
           <div className="hero-stat">
