@@ -418,7 +418,6 @@ export default function WizardWarsWeb() {
 
         .game-shell {
           width: 100%; min-height: 100vh; background: #07040D;
-          padding-top: 68px;
           display: flex; align-items: center; justify-content: center;
         }
         .game-phone {
@@ -428,7 +427,7 @@ export default function WizardWarsWeb() {
           position: relative; font-family: 'Quicksand', sans-serif; color: #e0d0ff;
         }
         @media (min-width: 480px) {
-          .game-shell { padding: 24px 0; }
+          .game-shell { padding: 67px 0; }
           .game-phone {
             min-height: 780px; max-height: 90vh; border-radius: 28px;
             border: 2px solid rgba(123,47,190,0.2);
