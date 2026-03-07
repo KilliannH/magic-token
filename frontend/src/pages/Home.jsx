@@ -110,7 +110,7 @@ export default function Home() {
         </p>
 
         <div className="hero-buttons" style={{ animation: 'fadeUp 0.8s ease 1s both' }}>
-          <a href="https://jup.ag/swap/SOL-CCzgnyYdNQA1Gwaw2JhniBnrBvEi6fTX5HFNXFuwpump" target="_blank" className="btn-primary"> Buy $MGC</a>
+          <a href="https://jup.ag/swap?sell=So11111111111111111111111111111111111111112&buy=CCzgnyYdNQA1Gwaw2JhniBnrBvEi6fTX5HFNXFuwpump" target="_blank" className="btn-primary"> Buy $MGC</a>
           <Link to="/game" className="btn-secondary">🎮 Play Wizard Wars</Link>
         </div>
 
