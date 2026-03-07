@@ -418,6 +418,7 @@ export default function WizardWarsWeb() {
 
         .game-shell {
           width: 100%; min-height: 100vh; background: #07040D;
+          padding-top: 68px;
           display: flex; align-items: center; justify-content: center;
         }
         .game-phone {
