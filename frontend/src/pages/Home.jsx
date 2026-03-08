@@ -116,7 +116,7 @@ export default function Home() {
 
         <div className="hero-stats" style={{ animation: 'fadeUp 0.8s ease 1.2s both' }}>
           <div className="hero-stat">
-            <AnimatedCounter target={24} />
+            <AnimatedCounter target={23} />
             <div className="hero-stat-label">Holders</div>
           </div>
           <div className="hero-stat">
@@ -206,9 +206,9 @@ export default function Home() {
         <div className="roadmap-grid">
           {[
             { phase: '🌱 Phase 1', title: 'Foundation', active: true, color: 'var(--gold)',
-              items: ['Token launch on Solana ✓', 'Community building', 'CoinGecko & CMC listing', 'First KOL campaigns', '1,000+ holders'] },
+              items: ['Token launch on Solana ✓', 'Community building ✓', 'CoinGecko & CMC listing', 'First KOL campaigns', '1,000+ holders'] },
             { phase: '💪 Phase 2', title: 'Growth', color: 'var(--purple-glow)',
-              items: ['Staking platform launch', 'Wizard Wars game release', '5,000+ holders', 'CEX tier 2 listing', 'Ambassador program'] },
+              items: ['Staking platform launch ✓', 'Wizard Wars game release ✓', '5,000+ holders', 'CEX tier 2 listing', 'Ambassador program'] },
             { phase: '🚀 Phase 3', title: 'Expansion', color: '#22C55E',
               items: ['PvP game mode', 'NFT collection for stakers', '10,000+ holders', 'CEX tier 1 pursuit', 'Cross-chain bridge'] },
             { phase: '✨ Phase 4', title: 'Magic Era', color: 'var(--accent)',
