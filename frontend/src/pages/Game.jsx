@@ -77,8 +77,8 @@ const MANA_REGEN = 20;
 function getEnemy(level) {
   const e = ENEMIES[(level - 1) % ENEMIES.length];
   const types = Object.keys(WIZARD_TYPES);
-  const baseHp = 80 + level * 15 + Math.floor(level * level * 0.8);
-  const baseDmg = 10 + level * 3;
+  const baseHp = 80 + level * 15 + Math.floor(level * level * 0.4);
+  const baseDmg = 10 + Math.floor(level * 2.5);
   return {
     ...e, level,
     type: types[Math.floor(Math.random() * types.length)],
@@ -419,7 +419,6 @@ export default function WizardWarsWeb() {
         .game-shell {
           width: 100%; min-height: 100vh; background: #07040D;
           display: flex; align-items: center; justify-content: center;
-          padding-top: 90px
         }
         .game-phone {
           width: 100%; max-width: 420px; min-height: 100vh; max-height: 100vh;
