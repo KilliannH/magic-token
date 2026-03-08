@@ -9,6 +9,7 @@ import {
   getGlobalStats, getPlayer,
   getCurrentTournament, enterTournament, submitRankedScore,
   getTournamentLeaderboard, getTournamentInfo, isPlayerInTournament,
+  closeTournament,
 } from './db.js';
 
 config();
@@ -23,7 +24,7 @@ const PORT = parseInt(process.env.PORT) || 3001;
 // $MGC Token config
 const MGC_MINT = process.env.MGC_TOKEN_MINT || 'CCzgnyYdNQA1Gwaw2JhniBnrBvEi6fTX5HFNXFuwpump';
 const SOLANA_RPC = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-const TREASURY_WALLET = process.env.TREASURY_WALLET || '7PCxVEhtFP7iyK8m3xJzPnqWbruMSmjsFskDV9aeDPpu';
+const TREASURY_WALLET = process.env.TREASURY_WALLET || 'YOUR_TREASURY_WALLET_HERE';
 const TOURNAMENT_ENTRY_FEE = parseInt(process.env.TOURNAMENT_ENTRY_FEE) || 1000; // in $MGC
 
 // Tier thresholds (in whole tokens, not lamports)
@@ -217,6 +218,23 @@ app.get('/api/tournament/admin', async (req, res) => {
   }
 });
 
+// Close current tournament
+app.post('/api/tournament/close', async (req, res) => {
+  const adminKey = process.env.ADMIN_KEY || 'mgc-admin-2026';
+  if (req.query.key !== adminKey) {
+    return res.status(403).json({ error: 'Invalid admin key' });
+  }
+
+  try {
+    const tourney = await getCurrentTournament(TOURNAMENT_ENTRY_FEE);
+    await closeTournament(tourney.id);
+    res.json({ success: true, id: tourney.id, status: 'closed' });
+  } catch (err) {
+    console.error('POST /api/tournament/close error:', err.message);
+    res.status(500).json({ error: 'Failed to close tournament' });
+  }
+});
+
 // Get current tournament info
 app.get('/api/tournament', async (req, res) => {
   try {
@@ -265,6 +283,10 @@ app.post('/api/tournament/enter', async (req, res) => {
     // Get current tournament
     const tourney = await getCurrentTournament(TOURNAMENT_ENTRY_FEE);
 
+    if (tourney.status === 'closed') {
+      return res.status(400).json({ error: 'Tournament is closed. Next one starts Monday.' });
+    }
+
     // Check if already entered
     const already = await isPlayerInTournament(tourney.id, wallet);
     if (already) {
@@ -295,6 +317,9 @@ app.post('/api/tournament/score', async (req, res) => {
     }
 
     const tourney = await getCurrentTournament(TOURNAMENT_ENTRY_FEE);
+    if (tourney.status === 'closed') {
+      return res.status(400).json({ error: 'Tournament is closed' });
+    }
     const entered = await isPlayerInTournament(tourney.id, wallet);
     if (!entered) {
       return res.status(403).json({ error: 'Not registered in current tournament' });

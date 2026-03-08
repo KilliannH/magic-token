@@ -7,6 +7,8 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(null);
+  const [closing, setClosing] = useState(false);
+  const [closed, setClosed] = useState(false);
 
   useEffect(() => {
     if (!ADMIN_KEY) { setError('Missing ?key= parameter'); setLoading(false); return; }
@@ -21,6 +23,15 @@ export default function Admin() {
     navigator.clipboard?.writeText(text);
     setCopied(id);
     setTimeout(() => setCopied(null), 1500);
+  };
+
+  const handleClose = () => {
+    if (!closing) { setClosing(true); return; }
+    fetch(`/api/tournament/close?key=${ADMIN_KEY}`, { method: 'POST' })
+      .then(r => r.json())
+      .then(d => { if (d.success) setClosed(true); else alert(d.error); })
+      .catch(() => alert('Failed'))
+      .finally(() => setClosing(false));
   };
 
   const medals = ['🥇', '🥈', '🥉'];
@@ -79,10 +90,26 @@ export default function Admin() {
                 <div className="stat-label">Entry Fee</div>
               </div>
               <div className="stat-box">
-                <div className="stat-val" style={{ fontSize: 14 }}>{data.tournament.status}</div>
+                <div className="stat-val" style={{ fontSize: 14 }}>{closed ? 'closed' : data.tournament.status}</div>
                 <div className="stat-label">Status</div>
               </div>
             </div>
+
+            {/* Close button */}
+            {!closed && data.tournament.status !== 'closed' ? (
+              <button onClick={handleClose} style={{
+                width: '100%', padding: '10px', borderRadius: 10, border: `2px solid ${closing ? '#ef5350' : 'rgba(239,83,80,0.3)'}`,
+                background: closing ? 'rgba(239,83,80,0.15)' : 'rgba(239,83,80,0.05)',
+                color: '#ef5350', fontFamily: "'Cinzel', serif", fontWeight: 700, fontSize: 13,
+                cursor: 'pointer', transition: 'all 0.3s',
+              }}>
+                {closing ? '⚠️ Click again to confirm close' : '🔒 Close Tournament'}
+              </button>
+            ) : (
+              <div style={{ textAlign: 'center', padding: 10, borderRadius: 10, background: 'rgba(102,187,106,0.08)', border: '1px solid rgba(102,187,106,0.2)', color: '#66BB6A', fontSize: 13, fontWeight: 700 }}>
+                ✅ Tournament closed — send prizes to winners below
+              </div>
+            )}
           </div>
 
           {/* Winners */}

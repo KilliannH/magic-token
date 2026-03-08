@@ -278,6 +278,11 @@ export async function isPlayerInTournament(tournamentId, wallet) {
   return entry.rows.length > 0;
 }
 
+// Close a tournament
+export async function closeTournament(tournamentId) {
+  await pool.query('UPDATE tournaments SET status = $1 WHERE id = $2', ['closed', tournamentId]);
+}
+
 // ============ CLEANUP ============
 
 export async function closeDB() {
